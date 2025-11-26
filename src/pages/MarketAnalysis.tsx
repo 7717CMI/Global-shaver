@@ -61,6 +61,7 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
     productType: [] as string[],
     country: [] as string[],
     segment: 'productType' as string,
+    subSegment: '' as string, // Selected sub-segment item
   })
   
   // Separate filters for YoY/CAGR tab
@@ -68,7 +69,6 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
     region: [] as string[],
     productType: [] as string[],
     country: [] as string[],
-    distributionChannel: [] as string[],
   })
 
   useEffect(() => {
@@ -428,11 +428,25 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       // Get selected product types or use defaults
       let productTypes: string[] = []
       if (filters.productType.length > 0) {
+        // First, collect all parent categories that have child selections
+        const parentsWithChildren = new Set<string>()
         filters.productType.forEach(pt => {
           if (pt.includes(' - ')) {
+            const parent = pt.split(' - ')[0]
+            parentsWithChildren.add(parent)
+          }
+        })
+
+        // Now build productTypes: skip parent if it has child selections
+        filters.productType.forEach(pt => {
+          if (pt.includes(' - ')) {
+            // This is a child item, add the child name
             productTypes.push(pt.split(' - ')[1])
           } else {
-            productTypes.push(pt)
+            // This is a parent item, only add if it doesn't have child selections
+            if (!parentsWithChildren.has(pt)) {
+              productTypes.push(pt)
+            }
           }
         })
       } else {
@@ -440,9 +454,30 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       }
 
       // Technology options
-      const technologies = filters.technology.length > 0
-        ? filters.technology.map(t => t.includes(' - ') ? t.split(' - ')[1] : t)
-        : ['Corded', 'Cordless / Rechargeable']
+      let technologies: string[] = []
+      if (filters.technology.length > 0) {
+        // First, collect all parent categories that have child selections
+        const parentsWithChildren = new Set<string>()
+        filters.technology.forEach(t => {
+          if (t.includes(' - ')) {
+            const parent = t.split(' - ')[0]
+            parentsWithChildren.add(parent)
+          }
+        })
+
+        // Now build technologies: skip parent if it has child selections
+        filters.technology.forEach(t => {
+          if (t.includes(' - ')) {
+            technologies.push(t.split(' - ')[1])
+          } else {
+            if (!parentsWithChildren.has(t)) {
+              technologies.push(t)
+            }
+          }
+        })
+      } else {
+        technologies = ['Corded', 'Cordless / Rechargeable']
+      }
 
       // Blade types
       const bladeTypes = filters.bladeType.length > 0
@@ -461,11 +496,24 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       }
       let endUsers: string[] = []
       if (filters.endUser.length > 0) {
+        // First, collect all parent categories that have child selections
+        const parentsWithChildren = new Set<string>()
+        filters.endUser.forEach(eu => {
+          if (eu.includes(' - ')) {
+            const parent = eu.split(' - ')[0]
+            parentsWithChildren.add(parent)
+          }
+        })
+
+        // Now build endUsers: skip parent if it has child selections
         filters.endUser.forEach(eu => {
           if (eu.includes(' - ')) {
             endUsers.push(eu.split(' - ')[1])
           } else {
-            endUsers.push(eu)
+            // Only add parent if it doesn't have child selections
+            if (!parentsWithChildren.has(eu)) {
+              endUsers.push(eu)
+            }
           }
         })
       } else {
@@ -473,9 +521,30 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       }
 
       // Distribution channels
-      const distributionChannels = filters.distributionChannel.length > 0
-        ? filters.distributionChannel.map(dc => dc.includes(' - ') ? dc.split(' - ')[1] : dc)
-        : ['Offline', 'Online']
+      let distributionChannels: string[] = []
+      if (filters.distributionChannel.length > 0) {
+        // First, collect all parent categories that have child selections
+        const parentsWithChildren = new Set<string>()
+        filters.distributionChannel.forEach(dc => {
+          if (dc.includes(' - ')) {
+            const parent = dc.split(' - ')[0]
+            parentsWithChildren.add(parent)
+          }
+        })
+
+        // Now build distributionChannels: skip parent if it has child selections
+        filters.distributionChannel.forEach(dc => {
+          if (dc.includes(' - ')) {
+            distributionChannels.push(dc.split(' - ')[1])
+          } else {
+            if (!parentsWithChildren.has(dc)) {
+              distributionChannels.push(dc)
+            }
+          }
+        })
+      } else {
+        distributionChannels = ['Offline', 'Online']
+      }
 
       // Base market values by country (in millions)
       const countryBaseValues: Record<string, number> = {
@@ -531,6 +600,22 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
           return entry
         }),
         segments: priceRanges
+      }
+
+      // Generate stacked data for technology
+      const technologyStackedData = {
+        chartData: years.map(year => {
+          const entry: Record<string, number | string> = { year: String(year) }
+          const yearMultiplier = Math.pow(yearGrowthRate, year - 2024)
+          const countryMultiplier = countries.reduce((sum, c) => sum + (countryBaseValues[c] || 5000), 0) / 40000
+
+          technologies.forEach((tech, idx) => {
+            const baseValue = (9000 - idx * 2000) * countryMultiplier * yearMultiplier
+            entry[tech] = Math.round(baseValue * (0.9 + Math.random() * 0.2))
+          })
+          return entry
+        }),
+        segments: technologies
       }
 
       // Generate stacked data for end users
@@ -599,6 +684,7 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
         bladeMaterialStackedData: bladeTypeStackedData,
         handleLengthStackedData: priceRangeStackedData,
         applicationStackedData: { chartData: [], segments: [] },
+        technologyStackedData,
         endUserStackedData,
         distributionChannelTypeStackedData: distributionChannelStackedData,
         offlineChannelStackedData: { chartData: [], segments: [] },
@@ -620,8 +706,37 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
     ) => {
       // Use selected segments from filter if provided, otherwise use segments from filtered data
       const segmentsFromData = [...new Set(filteredData.map(getSegmentValue))].filter(Boolean).sort()
-      const segments = selectedSegments && selectedSegments.length > 0 
-        ? selectedSegments.filter(s => s).sort() 
+
+      // Process selected segments to exclude parent items when children are selected
+      let processedSegments: string[] = []
+      if (selectedSegments && selectedSegments.length > 0) {
+        // First, collect all parent categories that have child selections
+        const parentsWithChildren = new Set<string>()
+        selectedSegments.forEach(s => {
+          if (s && s.includes(' - ')) {
+            const parent = s.split(' - ')[0]
+            parentsWithChildren.add(parent)
+          }
+        })
+
+        // Now build processedSegments: skip parent if it has child selections
+        selectedSegments.forEach(s => {
+          if (!s) return
+          if (s.includes(' - ')) {
+            // This is a child item, add the child name only
+            processedSegments.push(s.split(' - ')[1])
+          } else {
+            // This is a parent item, only add if it doesn't have child selections
+            if (!parentsWithChildren.has(s)) {
+              processedSegments.push(s)
+            }
+          }
+        })
+        processedSegments = processedSegments.sort()
+      }
+
+      const segments = processedSegments.length > 0
+        ? processedSegments
         : segmentsFromData
       
       const segmentMap = new Map<string, number>()
@@ -649,10 +764,39 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       selectedSegments?: string[]
     ) => {
       const segmentsFromData = [...new Set(filteredData.map(getSegmentValue))].filter(Boolean).sort()
-      const segments = selectedSegments && selectedSegments.length > 0 
-        ? selectedSegments.filter(s => s).sort() 
+
+      // Process selected segments to exclude parent items when children are selected
+      let processedSegments: string[] = []
+      if (selectedSegments && selectedSegments.length > 0) {
+        // First, collect all parent categories that have child selections
+        const parentsWithChildren = new Set<string>()
+        selectedSegments.forEach(s => {
+          if (s && s.includes(' - ')) {
+            const parent = s.split(' - ')[0]
+            parentsWithChildren.add(parent)
+          }
+        })
+
+        // Now build processedSegments: skip parent if it has child selections
+        selectedSegments.forEach(s => {
+          if (!s) return
+          if (s.includes(' - ')) {
+            // This is a child item, add the child name only
+            processedSegments.push(s.split(' - ')[1])
+          } else {
+            // This is a parent item, only add if it doesn't have child selections
+            if (!parentsWithChildren.has(s)) {
+              processedSegments.push(s)
+            }
+          }
+        })
+        processedSegments = processedSegments.sort()
+      }
+
+      const segments = processedSegments.length > 0
+        ? processedSegments
         : segmentsFromData
-      
+
       // Group by year, then by segment
       const yearSegmentMap = new Map<number, Map<string, number>>()
       
@@ -809,6 +953,10 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       (d) => d.application || '',
       filters.application.length > 0 ? filters.application : undefined
     )
+    const technologyStackedData = generateYearWiseStackedBarData(
+      (d) => d.technology || '',
+      filters.technology.length > 0 ? filters.technology : undefined
+    )
     const endUserStackedData = generateYearWiseStackedBarData(
       (d) => d.endUser || '',
       filters.endUser.length > 0 ? filters.endUser : undefined
@@ -918,12 +1066,13 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       bladeMaterialStackedData,
       handleLengthStackedData,
       applicationStackedData,
+      technologyStackedData,
       endUserStackedData,
       distributionChannelTypeStackedData,
       offlineChannelStackedData,
       onlineChannelStackedData,
     }
-  }, [filteredData, filters.marketEvaluation, filters.productCategory, filters.subProductCategory, filters.productType, filters.bladeMaterial, filters.handleLength, filters.application, filters.endUser, filters.country, filters.distributionChannelType])
+  }, [filteredData, filters.marketEvaluation, filters.productCategory, filters.subProductCategory, filters.productType, filters.bladeMaterial, filters.handleLength, filters.application, filters.technology, filters.endUser, filters.country, filters.distributionChannelType])
 
   // KPI Stats - Generate based on selected filters using demo data
   const kpis = useMemo(() => {
@@ -1176,9 +1325,80 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
     return filtered
   }, [data, attractivenessFilters])
 
+  // Segment hierarchy configuration - defines parent segments and their child sub-segments
+  const segmentHierarchy: Record<string, { items: string[]; subItems: Record<string, string[]> }> = useMemo(() => ({
+    productType: {
+      items: ['Foil Shavers', 'Rotary Shavers', 'Trimmers & Groomers', 'Hybrid Shavers', 'Lady Shavers', 'Hair Clippers'],
+      subItems: {
+        'Foil Shavers': ['Single-foil', 'Dual-foil', 'Multi-foil (3+)'],
+        'Rotary Shavers': ['Dual-head', 'Triple-head', 'Multi-head (4+)'],
+        'Trimmers & Groomers': ['Beard trimmers', 'Body groomers', 'Detail trimmers'],
+        'Hybrid Shavers': ['Blade-electric combo', 'Wet & dry hybrid tools'],
+        'Lady Shavers': ['Face shavers', 'Body shavers', 'Bikini trimmers'],
+        'Hair Clippers': ['Corded clippers', 'Cordless clippers', 'Others'],
+      }
+    },
+    technology: {
+      items: ['Corded', 'Cordless / Rechargeable'],
+      subItems: {
+        'Corded': ['AC powered', 'DC powered'],
+        'Cordless / Rechargeable': ['Li-ion battery', 'NiMH battery'],
+      }
+    },
+    bladeType: {
+      items: ['Stainless Steel Blades', 'Titanium-coated Blades', 'Carbon Steel', 'Ceramic Blades', 'Self-sharpening Blades', 'Replaceable vs Non-replaceable Heads'],
+      subItems: {} // No sub-items for blade type
+    },
+    priceRange: {
+      items: ['Economy', 'Mid-Range', 'Premium'],
+      subItems: {} // No sub-items for price range
+    },
+    endUser: {
+      items: ['Home Users', 'Professional Users'],
+      subItems: {
+        'Home Users': ['Men', 'Women', 'Unisex'],
+        'Professional Users': ['Barbers', 'Salons', 'Grooming service providers'],
+      }
+    },
+    distributionChannel: {
+      items: ['Offline', 'Online'],
+      subItems: {
+        'Offline': ['Supermarkets & Hypermarkets', 'Specialty Stores', 'Department Stores', 'Others'],
+        'Online': ['E-commerce / Third Party Platforms', 'Company Websites'],
+      }
+    },
+  }), [])
+
+  // Check if segment has child filters (subItems)
+  const segmentHasChildFilters = useMemo(() => {
+    const segment = attractivenessFilters.segment
+    if (!segment || !segmentHierarchy[segment]) return false
+    const subItems = segmentHierarchy[segment].subItems
+    return subItems && Object.keys(subItems).length > 0
+  }, [attractivenessFilters.segment, segmentHierarchy])
+
+  // Get available sub-segment options based on selected segment
+  // Only show options if the segment has child filters
+  const availableSubSegments = useMemo(() => {
+    const segment = attractivenessFilters.segment
+    if (!segment || !segmentHierarchy[segment]) return []
+    // Only return items if this segment has subItems (child filters)
+    const subItems = segmentHierarchy[segment].subItems
+    if (!subItems || Object.keys(subItems).length === 0) return []
+    return segmentHierarchy[segment].items
+  }, [attractivenessFilters.segment, segmentHierarchy])
+
+  // Get available sub-sub-segment options based on selected sub-segment
+  const availableSubSubSegments = useMemo(() => {
+    const segment = attractivenessFilters.segment
+    const subSegment = attractivenessFilters.subSegment
+    if (!segment || !subSegment || !segmentHierarchy[segment]) return []
+    return segmentHierarchy[segment].subItems[subSegment] || []
+  }, [attractivenessFilters.segment, attractivenessFilters.subSegment, segmentHierarchy])
+
   // Bubble Chart Data (Market Attractiveness) - based on filters
   const bubbleChartData = useMemo(() => {
-    // Define segment data configurations
+    // Define segment data configurations with sub-segment values
     const segmentConfigs: Record<string, { items: string[]; values: Record<string, { cagr: number; share: number; opp: number }> }> = {
       productType: {
         items: ['Foil Shavers', 'Rotary Shavers', 'Trimmers & Groomers', 'Hybrid Shavers', 'Lady Shavers', 'Hair Clippers'],
@@ -1192,22 +1412,21 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
         }
       },
       technology: {
-        items: ['Corded', 'Cordless / Rechargeable', 'Li-ion battery', 'NiMH battery'],
+        items: ['Corded', 'Cordless / Rechargeable'],
         values: {
           'Corded': { cagr: 3.5, share: 12.5, opp: 3200 },
           'Cordless / Rechargeable': { cagr: 8.2, share: 9.5, opp: 12500 },
-          'Li-ion battery': { cagr: 9.5, share: 6.8, opp: 10800 },
-          'NiMH battery': { cagr: 5.8, share: 10.2, opp: 2800 },
         }
       },
       bladeType: {
-        items: ['Stainless Steel Blades', 'Titanium-coated Blades', 'Carbon Steel', 'Ceramic Blades', 'Self-sharpening Blades'],
+        items: ['Stainless Steel Blades', 'Titanium-coated Blades', 'Carbon Steel', 'Ceramic Blades', 'Self-sharpening Blades', 'Replaceable vs Non-replaceable Heads'],
         values: {
           'Stainless Steel Blades': { cagr: 4.2, share: 13.5, opp: 9200 },
           'Titanium-coated Blades': { cagr: 7.5, share: 10.2, opp: 7500 },
           'Carbon Steel': { cagr: 5.5, share: 11.8, opp: 4100 },
           'Ceramic Blades': { cagr: 8.8, share: 6.5, opp: 4800 },
           'Self-sharpening Blades': { cagr: 10.2, share: 8.2, opp: 6500 },
+          'Replaceable vs Non-replaceable Heads': { cagr: 6.5, share: 7.8, opp: 5800 },
         }
       },
       priceRange: {
@@ -1219,25 +1438,146 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
         }
       },
       endUser: {
-        items: ['Home Users', 'Professional Users', 'Men', 'Women', 'Barbers', 'Salons'],
+        items: ['Home Users', 'Professional Users'],
         values: {
           'Home Users': { cagr: 4.2, share: 14.5, opp: 11200 },
           'Professional Users': { cagr: 8.5, share: 7.8, opp: 6800 },
-          'Men': { cagr: 5.5, share: 12.2, opp: 8500 },
-          'Women': { cagr: 7.2, share: 10.5, opp: 5200 },
-          'Barbers': { cagr: 9.8, share: 5.2, opp: 4100 },
-          'Salons': { cagr: 10.5, share: 8.5, opp: 4800 },
         }
       },
       distributionChannel: {
-        items: ['Offline', 'Online', 'Supermarkets & Hypermarkets', 'Specialty Stores', 'E-commerce / Third Party Platforms'],
+        items: ['Offline', 'Online'],
         values: {
           'Offline': { cagr: 3.5, share: 12.5, opp: 6800 },
           'Online': { cagr: 8.5, share: 8.2, opp: 9500 },
-          'Supermarkets & Hypermarkets': { cagr: 4.8, share: 10.5, opp: 4500 },
-          'Specialty Stores': { cagr: 6.2, share: 9.2, opp: 5200 },
-          'E-commerce / Third Party Platforms': { cagr: 9.8, share: 6.5, opp: 8200 },
         }
+      },
+    }
+
+    // Sub-segment values configuration
+    const subSegmentConfigs: Record<string, Record<string, { items: string[]; values: Record<string, { cagr: number; share: number; opp: number }> }>> = {
+      productType: {
+        'Foil Shavers': {
+          items: ['Single-foil', 'Dual-foil', 'Multi-foil (3+)'],
+          values: {
+            'Single-foil': { cagr: 3.2, share: 8.5, opp: 2800 },
+            'Dual-foil': { cagr: 4.5, share: 10.2, opp: 3500 },
+            'Multi-foil (3+)': { cagr: 5.8, share: 7.8, opp: 3200 },
+          }
+        },
+        'Rotary Shavers': {
+          items: ['Dual-head', 'Triple-head', 'Multi-head (4+)'],
+          values: {
+            'Dual-head': { cagr: 5.2, share: 6.5, opp: 2200 },
+            'Triple-head': { cagr: 7.5, share: 8.8, opp: 3500 },
+            'Multi-head (4+)': { cagr: 8.8, share: 5.2, opp: 2100 },
+          }
+        },
+        'Trimmers & Groomers': {
+          items: ['Beard trimmers', 'Body groomers', 'Detail trimmers'],
+          values: {
+            'Beard trimmers': { cagr: 9.2, share: 6.8, opp: 3800 },
+            'Body groomers': { cagr: 10.5, share: 5.5, opp: 2800 },
+            'Detail trimmers': { cagr: 8.8, share: 4.2, opp: 1600 },
+          }
+        },
+        'Hybrid Shavers': {
+          items: ['Blade-electric combo', 'Wet & dry hybrid tools'],
+          values: {
+            'Blade-electric combo': { cagr: 10.5, share: 4.2, opp: 2800 },
+            'Wet & dry hybrid tools': { cagr: 11.8, share: 5.5, opp: 2700 },
+          }
+        },
+        'Lady Shavers': {
+          items: ['Face shavers', 'Body shavers', 'Bikini trimmers'],
+          values: {
+            'Face shavers': { cagr: 6.8, share: 4.5, opp: 1400 },
+            'Body shavers': { cagr: 8.2, share: 5.2, opp: 1800 },
+            'Bikini trimmers': { cagr: 7.5, share: 3.8, opp: 1000 },
+          }
+        },
+        'Hair Clippers': {
+          items: ['Corded clippers', 'Cordless clippers', 'Others'],
+          values: {
+            'Corded clippers': { cagr: 2.8, share: 8.5, opp: 2100 },
+            'Cordless clippers': { cagr: 4.5, share: 6.2, opp: 2500 },
+            'Others': { cagr: 5.2, share: 4.8, opp: 1500 },
+          }
+        },
+      },
+      technology: {
+        'Corded': {
+          items: ['AC powered', 'DC powered'],
+          values: {
+            'AC powered': { cagr: 2.8, share: 7.5, opp: 1800 },
+            'DC powered': { cagr: 4.2, share: 5.2, opp: 1400 },
+          }
+        },
+        'Cordless / Rechargeable': {
+          items: ['Li-ion battery', 'NiMH battery'],
+          values: {
+            'Li-ion battery': { cagr: 9.5, share: 6.8, opp: 8500 },
+            'NiMH battery': { cagr: 5.8, share: 4.2, opp: 2800 },
+          }
+        },
+      },
+      priceRange: {
+        'Economy': {
+          items: ['Under $20', '$20-$50'],
+          values: {
+            'Under $20': { cagr: 3.5, share: 6.8, opp: 2200 },
+            '$20-$50': { cagr: 4.8, share: 8.2, opp: 3300 },
+          }
+        },
+        'Mid-Range': {
+          items: ['$50-$100', '$100-$150'],
+          values: {
+            '$50-$100': { cagr: 6.2, share: 7.5, opp: 4800 },
+            '$100-$150': { cagr: 7.5, share: 6.2, opp: 5000 },
+          }
+        },
+        'Premium': {
+          items: ['$150-$300', 'Above $300'],
+          values: {
+            '$150-$300': { cagr: 8.8, share: 5.2, opp: 4200 },
+            'Above $300': { cagr: 10.2, share: 3.8, opp: 3000 },
+          }
+        },
+      },
+      endUser: {
+        'Home Users': {
+          items: ['Men', 'Women', 'Unisex'],
+          values: {
+            'Men': { cagr: 4.5, share: 9.5, opp: 5500 },
+            'Women': { cagr: 5.8, share: 6.8, opp: 3500 },
+            'Unisex': { cagr: 3.8, share: 4.2, opp: 2200 },
+          }
+        },
+        'Professional Users': {
+          items: ['Barbers', 'Salons', 'Grooming service providers'],
+          values: {
+            'Barbers': { cagr: 7.8, share: 5.5, opp: 2800 },
+            'Salons': { cagr: 9.2, share: 4.8, opp: 2500 },
+            'Grooming service providers': { cagr: 8.5, share: 3.2, opp: 1500 },
+          }
+        },
+      },
+      distributionChannel: {
+        'Offline': {
+          items: ['Supermarkets & Hypermarkets', 'Specialty Stores', 'Department Stores', 'Others'],
+          values: {
+            'Supermarkets & Hypermarkets': { cagr: 3.8, share: 6.5, opp: 2800 },
+            'Specialty Stores': { cagr: 4.5, share: 5.2, opp: 2200 },
+            'Department Stores': { cagr: 2.8, share: 3.8, opp: 1200 },
+            'Others': { cagr: 3.2, share: 2.5, opp: 600 },
+          }
+        },
+        'Online': {
+          items: ['E-commerce / Third Party Platforms', 'Company Websites'],
+          values: {
+            'E-commerce / Third Party Platforms': { cagr: 9.8, share: 6.5, opp: 6500 },
+            'Company Websites': { cagr: 7.2, share: 4.2, opp: 3000 },
+          }
+        },
       },
     }
 
@@ -1263,11 +1603,26 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       countryMultiplier = attractivenessFilters.country.reduce((sum, c) => sum + (countryMultipliers[c] || 0.5), 0) / attractivenessFilters.country.length
     }
 
-    // Determine what to group by based on segment selection
+    // Determine what to group by based on segment and sub-segment selection
     const selectedSegment = attractivenessFilters.segment
+    const selectedSubSegment = attractivenessFilters.subSegment
 
+    // If a sub-segment is selected, show its child items
+    if (selectedSegment && selectedSubSegment && subSegmentConfigs[selectedSegment]?.[selectedSubSegment]) {
+      const subConfig = subSegmentConfigs[selectedSegment][selectedSubSegment]
+      return subConfig.items.map(item => {
+        const baseValues = subConfig.values[item] || { cagr: 5.0, share: 5.0, opp: 5000 }
+        return {
+          region: item,
+          cagrIndex: baseValues.cagr * countryMultiplier * (0.9 + Math.random() * 0.2),
+          marketShareIndex: baseValues.share * countryMultiplier * (0.9 + Math.random() * 0.2),
+          incrementalOpportunity: baseValues.opp * countryMultiplier * (0.9 + Math.random() * 0.2),
+        }
+      })
+    }
+
+    // If no sub-segment selected but segment is selected, show segment items
     if (selectedSegment && segmentConfigs[selectedSegment]) {
-      // Generate bubble data based on selected segment
       const config = segmentConfigs[selectedSegment]
       return config.items.map(item => {
         const baseValues = config.values[item] || { cagr: 5.0, share: 5.0, opp: 5000 }
@@ -1354,42 +1709,45 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
     if (yoyFilters.region.length > 0) {
       filtered = filtered.filter(d => yoyFilters.region.includes(d.region))
     }
-    if (yoyFilters.productType.length > 0) {
-      filtered = filtered.filter(d => yoyFilters.productType.includes(d.productType))
-    }
     if (yoyFilters.country.length > 0) {
       filtered = filtered.filter(d => yoyFilters.country.includes(d.country))
     }
 
-    // Filter by distribution channel - include parent channel data when subfilters are selected
-    if (yoyFilters.distributionChannel.length > 0) {
-      const selectedChannels = yoyFilters.distributionChannel
-      // Check if Offline or Online parent is selected, or any of their subfilters
-      const offlineSubfilters = ['Supermarkets & Hypermarkets', 'Specialty Stores', 'Department Stores', 'Others']
-      const onlineSubfilters = ['E-commerce / Third Party Platforms', 'Company Websites', 'Others']
+    // Filter by product type - handle hierarchical selection
+    if (yoyFilters.productType.length > 0) {
+      const selectedTypes = yoyFilters.productType
 
-      const hasOfflineParent = selectedChannels.includes('Offline')
-      const hasOnlineParent = selectedChannels.includes('Online')
-      const hasOfflineSubfilter = selectedChannels.some(c => c.startsWith('Offline - '))
-      const hasOnlineSubfilter = selectedChannels.some(c => c.startsWith('Online - '))
-
-      // Build list of all channels to include
-      const channelsToInclude: string[] = []
-
-      if (hasOfflineParent || hasOfflineSubfilter) {
-        channelsToInclude.push('Offline')
-        offlineSubfilters.forEach(sub => channelsToInclude.push(sub))
-      }
-      if (hasOnlineParent || hasOnlineSubfilter) {
-        channelsToInclude.push('Online')
-        onlineSubfilters.forEach(sub => channelsToInclude.push(sub))
+      // Product type hierarchy
+      const productTypeHierarchy: Record<string, string[]> = {
+        'Foil Shavers': ['Single-foil', 'Dual-foil', 'Multi-foil (3+)'],
+        'Rotary Shavers': ['Dual-head', 'Triple-head', 'Multi-head (4+)'],
+        'Trimmers & Groomers': ['Beard trimmers', 'Body groomers', 'Others'],
+        'Hybrid Shavers': ['Blade-electric combo', 'Wet & dry hybrid tools'],
+        'Lady Shavers': ['Face shavers', 'Body shavers', 'Bikini trimmers'],
+        'Hair Clippers': ['Corded clippers', 'Cordless clippers', 'Others']
       }
 
-      // Filter based on distribution channel
-      filtered = filtered.filter(d => {
-        const channel = d.distributionChannel || ''
-        return channelsToInclude.some(c => channel.toLowerCase().includes(c.toLowerCase()))
+      // Build list of all product types to include
+      const typesToInclude: string[] = []
+
+      // Check each parent category
+      Object.entries(productTypeHierarchy).forEach(([parent, children]) => {
+        const hasParent = selectedTypes.includes(parent)
+        const hasSubfilter = selectedTypes.some(t => t.startsWith(`${parent} - `))
+
+        if (hasParent || hasSubfilter) {
+          typesToInclude.push(parent)
+          children.forEach(child => typesToInclude.push(child))
+        }
       })
+
+      // Filter based on product type
+      if (typesToInclude.length > 0) {
+        filtered = filtered.filter(d => {
+          const productType = d.productType || ''
+          return typesToInclude.some(t => productType.toLowerCase().includes(t.toLowerCase()))
+        })
+      }
     }
 
     return filtered
@@ -1410,43 +1768,98 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       'Japan': { baseYoy: 3.8, baseCagr: 3.5 },
     }
 
-    // Distribution channel multipliers
-    const getChannelMultiplier = (): number => {
-      if (yoyFilters.distributionChannel.length === 0) return 1.0
-
-      const selectedChannels = yoyFilters.distributionChannel
-      const hasOffline = selectedChannels.includes('Offline') || selectedChannels.some(c => c.startsWith('Offline - '))
-      const hasOnline = selectedChannels.includes('Online') || selectedChannels.some(c => c.startsWith('Online - '))
-
-      if (hasOnline && !hasOffline) {
-        return 1.35 // Online has higher growth
-      } else if (hasOffline && !hasOnline) {
-        return 0.85 // Offline has lower growth
-      }
-      return 1.0 // Both selected
+    // Product type multipliers for growth rates
+    const productTypeMultipliers: Record<string, number> = {
+      'Foil Shavers': 1.0,
+      'Rotary Shavers': 1.1,
+      'Trimmers & Groomers': 1.25,
+      'Hybrid Shavers': 1.4,
+      'Lady Shavers': 1.15,
+      'Hair Clippers': 0.9,
+      // Sub-categories
+      'Single-foil': 0.85,
+      'Dual-foil': 1.0,
+      'Multi-foil (3+)': 1.15,
+      'Dual-head': 0.95,
+      'Triple-head': 1.1,
+      'Multi-head (4+)': 1.2,
+      'Beard trimmers': 1.2,
+      'Body groomers': 1.3,
+      'Blade-electric combo': 1.35,
+      'Wet & dry hybrid tools': 1.45,
+      'Face shavers': 1.1,
+      'Body shavers': 1.15,
+      'Bikini trimmers': 1.2,
+      'Corded clippers': 0.75,
+      'Cordless clippers': 1.0,
+      'Others': 0.9,
     }
 
-    const channelMultiplier = getChannelMultiplier()
+    // Get product type multiplier based on selected product types
+    const getProductTypeMultiplier = (): number => {
+      if (yoyFilters.productType.length === 0) return 1.0
 
-    // Generate label suffix based on distribution channel
-    const getChannelLabel = (): string => {
-      if (yoyFilters.distributionChannel.length === 0) return ''
+      // Process selected product types to get child items only when parent has children selected
+      const processedTypes: string[] = []
+      const parentsWithChildren = new Set<string>()
 
-      const selectedChannels = yoyFilters.distributionChannel
-      const hasOffline = selectedChannels.includes('Offline') || selectedChannels.some(c => c.startsWith('Offline - '))
-      const hasOnline = selectedChannels.includes('Online') || selectedChannels.some(c => c.startsWith('Online - '))
+      yoyFilters.productType.forEach(pt => {
+        if (pt.includes(' - ')) {
+          const parent = pt.split(' - ')[0]
+          parentsWithChildren.add(parent)
+        }
+      })
 
-      if (hasOnline && hasOffline) {
-        return ' - All Channels'
-      } else if (hasOnline) {
-        return ' - Online'
-      } else if (hasOffline) {
-        return ' - Offline'
-      }
-      return ''
+      yoyFilters.productType.forEach(pt => {
+        if (pt.includes(' - ')) {
+          processedTypes.push(pt.split(' - ')[1])
+        } else if (!parentsWithChildren.has(pt)) {
+          processedTypes.push(pt)
+        }
+      })
+
+      if (processedTypes.length === 0) return 1.0
+
+      // Average the multipliers for all selected product types
+      const totalMultiplier = processedTypes.reduce((sum, type) => {
+        return sum + (productTypeMultipliers[type] || 1.0)
+      }, 0)
+
+      return totalMultiplier / processedTypes.length
     }
 
-    const channelLabel = getChannelLabel()
+    const productTypeMultiplier = getProductTypeMultiplier()
+
+    // Generate label suffix based on product type selection
+    const getProductTypeLabel = (): string => {
+      if (yoyFilters.productType.length === 0) return ''
+
+      // Process to get display names
+      const processedTypes: string[] = []
+      const parentsWithChildren = new Set<string>()
+
+      yoyFilters.productType.forEach(pt => {
+        if (pt.includes(' - ')) {
+          const parent = pt.split(' - ')[0]
+          parentsWithChildren.add(parent)
+        }
+      })
+
+      yoyFilters.productType.forEach(pt => {
+        if (pt.includes(' - ')) {
+          processedTypes.push(pt.split(' - ')[1])
+        } else if (!parentsWithChildren.has(pt)) {
+          processedTypes.push(pt)
+        }
+      })
+
+      if (processedTypes.length === 0) return ''
+      if (processedTypes.length === 1) return ` - ${processedTypes[0]}`
+      if (processedTypes.length <= 3) return ` - ${processedTypes.join(', ')}`
+      return ` - ${processedTypes.length} Product Types`
+    }
+
+    const productTypeLabel = getProductTypeLabel()
 
     // Generate data for each selected country
     return yoyFilters.country.map(country => {
@@ -1458,8 +1871,8 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
         const yearVariation = 1 + (Math.sin(index * 0.7) * 0.15)
         const randomVariation = 0.95 + Math.random() * 0.1
 
-        const yoy = index === 0 ? 0 : baseRates.baseYoy * channelMultiplier * yearVariation * randomVariation
-        const cagr = index === 0 ? 0 : baseRates.baseCagr * channelMultiplier * (1 + index * 0.02) * randomVariation
+        const yoy = index === 0 ? 0 : baseRates.baseYoy * productTypeMultiplier * yearVariation * randomVariation
+        const cagr = index === 0 ? 0 : baseRates.baseCagr * productTypeMultiplier * (1 + index * 0.02) * randomVariation
 
         return {
           year,
@@ -1469,11 +1882,11 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
       })
 
       return {
-        label: `${country}${channelLabel}`,
+        label: `${country}${productTypeLabel}`,
         data: chartData
       }
     })
-  }, [yoyFilters.country, yoyFilters.distributionChannel])
+  }, [yoyFilters.country, yoyFilters.productType])
 
   if (loading) {
     return (
@@ -1810,7 +2223,7 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
           {/* Share Analysis Section - Year-wise Stacked Bar Charts */}
           {((analysisData.bladeMaterialStackedData.chartData.length > 0 && analysisData.bladeMaterialStackedData.segments.length > 0) ||
             (analysisData.handleLengthStackedData.chartData.length > 0 && analysisData.handleLengthStackedData.segments.length > 0) ||
-            (analysisData.applicationStackedData.chartData.length > 0 && analysisData.applicationStackedData.segments.length > 0) ||
+            (analysisData.technologyStackedData.chartData.length > 0 && analysisData.technologyStackedData.segments.length > 0) ||
             (analysisData.endUserStackedData.chartData.length > 0 && analysisData.endUserStackedData.segments.length > 0) ||
             (analysisData.distributionChannelTypeStackedData.chartData.length > 0 && analysisData.distributionChannelTypeStackedData.segments.length > 0) ||
             (analysisData.offlineChannelStackedData.chartData.length > 0 && analysisData.offlineChannelStackedData.segments.length > 0) ||
@@ -1882,7 +2295,7 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                 )}
 
                 {/* Technology Stacked Bar Chart */}
-                {analysisData.applicationStackedData.chartData.length > 0 && analysisData.applicationStackedData.segments.length > 0 && (
+                {analysisData.technologyStackedData.chartData.length > 0 && analysisData.technologyStackedData.segments.length > 0 && (
                   <div className={`p-5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 h-[480px] flex flex-col ${isDark ? 'bg-navy-card border-2 border-navy-light' : 'bg-white border-2 border-gray-200'}`}>
                     <div className="mb-3 pb-3 border-b border-gray-200 dark:border-navy-light">
                       <InfoTooltip content={`• Shows ${filters.marketEvaluation === 'By Volume' ? 'market volume' : 'market size'} share by technology by year\n• X-axis: Year, Y-axis: ${filters.marketEvaluation === 'By Volume' ? 'Market Volume' : 'Market Size'}\n• Each stacked bar shows the proportion for that year\n• Hover over bars to see detailed values and percentages`}>
@@ -1896,8 +2309,8 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                     </div>
                     <div className="flex-1 flex items-center justify-center min-h-0">
                       <CrossSegmentStackedBarChart
-                        data={analysisData.applicationStackedData.chartData}
-                        dataKeys={analysisData.applicationStackedData.segments}
+                        data={analysisData.technologyStackedData.chartData}
+                        dataKeys={analysisData.technologyStackedData.segments}
                         xAxisLabel="Year"
                         yAxisLabel={getDataLabel()}
                         nameKey="year"
@@ -2139,12 +2552,13 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <FilterDropdown
                     label="By Country"
-                    value={attractivenessFilters.country}
-                    onChange={(value) => setAttractivenessFilters({ ...attractivenessFilters, country: value as string[] })}
+                    value={attractivenessFilters.country[0] || ''}
+                    onChange={(value) => setAttractivenessFilters({ ...attractivenessFilters, country: value ? [value as string] : [] })}
                     options={['US', 'Germany', 'China', 'Japan']}
+                    multiple={false}
                   />
                   <div className="relative">
                     <label className="block text-sm font-semibold text-text-secondary-light dark:text-text-secondary-dark mb-2">
@@ -2152,7 +2566,11 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                     </label>
                     <select
                       value={attractivenessFilters.segment}
-                      onChange={(e) => setAttractivenessFilters({ ...attractivenessFilters, segment: e.target.value })}
+                      onChange={(e) => setAttractivenessFilters({
+                        ...attractivenessFilters,
+                        segment: e.target.value,
+                        subSegment: '' // Reset sub-segment when segment changes
+                      })}
                       className={`w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-electric-blue dark:focus:ring-cyan-accent transition-all ${
                         isDark
                           ? 'bg-navy-dark border-navy-light text-text-primary-dark'
@@ -2167,6 +2585,36 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                       <option value="distributionChannel">By Distribution Channel</option>
                     </select>
                   </div>
+                  <div className="relative">
+                    <label className="block text-sm font-semibold text-text-secondary-light dark:text-text-secondary-dark mb-2">
+                      By Sub-segment
+                    </label>
+                    <select
+                      value={attractivenessFilters.subSegment}
+                      onChange={(e) => setAttractivenessFilters({ ...attractivenessFilters, subSegment: e.target.value })}
+                      disabled={!segmentHasChildFilters}
+                      className={`w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-electric-blue dark:focus:ring-cyan-accent transition-all ${
+                        isDark
+                          ? 'bg-navy-dark border-navy-light text-text-primary-dark'
+                          : 'bg-white border-gray-300 text-text-primary-light'
+                      } ${!segmentHasChildFilters ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <option value="">{segmentHasChildFilters ? 'Select Sub-segment...' : 'No sub-segments available'}</option>
+                      {availableSubSegments.map(subSeg => (
+                        <option key={subSeg} value={subSeg}>{subSeg}</option>
+                      ))}
+                    </select>
+                    {!segmentHasChildFilters && (
+                      <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark mt-1">
+                        This segment shows all items directly on the graph
+                      </p>
+                    )}
+                    {availableSubSubSegments.length > 0 && (
+                      <p className="text-xs text-text-secondary-light dark:text-text-secondary-dark mt-1">
+                        Will show: {availableSubSubSegments.join(', ')}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2174,21 +2622,25 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                 <div className="mb-8">
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`w-1 h-10 rounded-full ${isDark ? 'bg-cyan-accent' : 'bg-electric-blue'}`}></div>
-                    <InfoTooltip content="• Shows market attractiveness by selected segment from 2025 to 2032\n• X-axis: CAGR Index (Compound Annual Growth Rate)\n• Y-axis: Market Share Index\n• Bubble size indicates incremental opportunity\n• Larger bubbles represent greater market potential">
+                    <InfoTooltip content="• Shows market attractiveness by selected segment from 2025 to 2032\n• X-axis: CAGR Index (Compound Annual Growth Rate)\n• Y-axis: Market Share Index\n• Bubble size indicates CAGR Index (higher CAGR = larger bubble)\n• Select a sub-segment to drill down into specific categories">
                       <h2 className="text-3xl font-bold text-text-primary-light dark:text-text-primary-dark cursor-help">
-                        Market Attractiveness, {attractivenessFilters.segment ? `By ${
-                          attractivenessFilters.segment === 'productType' ? 'Product Type' :
-                          attractivenessFilters.segment === 'technology' ? 'Technology' :
-                          attractivenessFilters.segment === 'bladeType' ? 'Blade Type' :
-                          attractivenessFilters.segment === 'priceRange' ? 'Price Range' :
-                          attractivenessFilters.segment === 'endUser' ? 'End User' :
-                          attractivenessFilters.segment === 'distributionChannel' ? 'Distribution Channel' : 'Segment'
-                        }` : 'By Country'}, 2025-2032
+                        Market Attractiveness, {attractivenessFilters.subSegment
+                          ? `${attractivenessFilters.subSegment}`
+                          : attractivenessFilters.segment ? `By ${
+                            attractivenessFilters.segment === 'productType' ? 'Product Type' :
+                            attractivenessFilters.segment === 'technology' ? 'Technology' :
+                            attractivenessFilters.segment === 'bladeType' ? 'Blade Type' :
+                            attractivenessFilters.segment === 'priceRange' ? 'Price Range' :
+                            attractivenessFilters.segment === 'endUser' ? 'End User' :
+                            attractivenessFilters.segment === 'distributionChannel' ? 'Distribution Channel' : 'Segment'
+                          }` : 'By Country'}, 2025-2032
                       </h2>
                     </InfoTooltip>
                   </div>
                   <p className="text-base text-text-secondary-light dark:text-text-secondary-dark ml-4 mb-2">
-                    Market attractiveness analysis by CAGR and Market Share Index
+                    {attractivenessFilters.subSegment
+                      ? `Showing sub-categories of ${attractivenessFilters.subSegment}`
+                      : 'Market attractiveness analysis by CAGR and Market Share Index'}
                     {attractivenessFilters.country.length > 0 && ` for ${attractivenessFilters.country.join(', ')}`}
                   </p>
                 </div>
@@ -2243,7 +2695,7 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                     </h3>
                   </div>
                   <p className="text-base text-text-secondary-light dark:text-text-secondary-dark ml-4">
-                    Filter YoY and CAGR analysis data by country and distribution channel.
+                    Filter YoY and CAGR analysis data by country and product type.
                   </p>
                 </div>
 
@@ -2258,17 +2710,33 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                     options={['US', 'Germany', 'China', 'Japan']}
                   />
                   <HierarchicalFilterDropdown
-                    label="By Distribution Channel"
-                    value={yoyFilters.distributionChannel}
-                    onChange={(value) => setYoyFilters({ ...yoyFilters, distributionChannel: value })}
+                    label="By Product Type"
+                    value={yoyFilters.productType}
+                    onChange={(value) => setYoyFilters({ ...yoyFilters, productType: value })}
                     hierarchy={[
                       {
-                        mainCategory: 'Offline',
-                        subCategories: ['Supermarkets & Hypermarkets', 'Specialty Stores', 'Department Stores', 'Others']
+                        mainCategory: 'Foil Shavers',
+                        subCategories: ['Single-foil', 'Dual-foil', 'Multi-foil (3+)']
                       },
                       {
-                        mainCategory: 'Online',
-                        subCategories: ['E-commerce / Third Party Platforms', 'Company Websites', 'Others']
+                        mainCategory: 'Rotary Shavers',
+                        subCategories: ['Dual-head', 'Triple-head', 'Multi-head (4+)']
+                      },
+                      {
+                        mainCategory: 'Trimmers & Groomers',
+                        subCategories: ['Beard trimmers', 'Body groomers', 'Others']
+                      },
+                      {
+                        mainCategory: 'Hybrid Shavers',
+                        subCategories: ['Blade-electric combo', 'Wet & dry hybrid tools']
+                      },
+                      {
+                        mainCategory: 'Lady Shavers',
+                        subCategories: ['Face shavers', 'Body shavers', 'Bikini trimmers']
+                      },
+                      {
+                        mainCategory: 'Hair Clippers',
+                        subCategories: ['Corded clippers', 'Cordless clippers', 'Others']
                       }
                     ]}
                   />
@@ -2279,7 +2747,7 @@ export function MarketAnalysis({ onNavigate }: MarketAnalysisProps) {
                 <div className="mb-8">
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`w-1 h-10 rounded-full ${isDark ? 'bg-cyan-accent' : 'bg-electric-blue'}`}></div>
-                    <InfoTooltip content="• Shows Year-over-Year (Y-o-Y) growth rate and Compound Annual Growth Rate (CAGR)\n• Toggle between Y-o-Y and CAGR views using the button\n• Y-o-Y shows year-to-year growth percentage\n• CAGR shows cumulative annual growth rate from the first year\n• Select regions to generate separate charts for each (no summation)\n• Use filters to analyze specific regions and product types">
+                    <InfoTooltip content="• Shows Year-over-Year (Y-o-Y) growth rate and Compound Annual Growth Rate (CAGR)\n• Toggle between Y-o-Y and CAGR views using the button\n• Y-o-Y shows year-to-year growth percentage\n• CAGR shows cumulative annual growth rate from the first year\n• Select countries to generate separate charts for each (no summation)\n• Use product type filter to analyze growth by specific product segments">
                       <h2 className="text-3xl font-bold text-text-primary-light dark:text-text-primary-dark cursor-help">
                         Year-over-Year (Y-o-Y) & CAGR Analysis
                       </h2>

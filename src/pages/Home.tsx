@@ -58,7 +58,7 @@ export function Home({ onNavigate }: HomeProps) {
         className="mb-10 text-center"
       >
         <h1 className="text-3xl md:text-4xl font-bold text-text-primary-light dark:text-text-primary-dark mb-2">
-          Global Electronic Shavers Market Dashboard
+          U.S., GERMANY, CHINA, & JAPAN ELECTRONIC SHAVERS MARKET Dashboard
         </h1>
         <p className="text-lg text-electric-blue dark:text-cyan-accent">
           Industry Insights, Trends, Outlook, and Opportunity Analysis, 2025-2032

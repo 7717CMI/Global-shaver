@@ -27,8 +27,8 @@ interface BubbleChartProps {
   yAxisLabel?: string
 }
 
-// All bubbles use blue color with 3D effect (matching screenshot)
-const BUBBLE_COLOR = '#0075FF' // Blue color for all bubbles
+// Color palette for bubbles - matches legend colors
+const BUBBLE_COLORS = ['#06B6D4', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899', '#3B82F6', '#EF4444', '#84CC16']
 
 export function BubbleChart({ 
   data, 
@@ -52,7 +52,7 @@ export function BubbleChart({
   const cagrSizeRange = maxCagr - minCagr
 
   const transformedData = useMemo(() => {
-    return data.map(item => {
+    return data.map((item, index) => {
       // Scale bubble size based on CAGR Index (min 30, max 100)
       // Higher CAGR = larger bubble
       const normalizedSize = cagrSizeRange > 0
@@ -63,6 +63,7 @@ export function BubbleChart({
         ...item,
         z: normalizedSize, // Recharts uses 'z' for bubble size
         size: normalizedSize, // Keep for custom shape
+        colorIndex: index, // Track index for consistent coloring
       }
     })
   }, [data, maxCagr, minCagr, cagrSizeRange])
@@ -115,19 +116,21 @@ export function BubbleChart({
     return null
   }
 
-  // Custom shape for 3D bubbles - all blue with 3D effect
+  // Custom shape for 3D bubbles - uses color based on index
   const CustomShape = (props: any): JSX.Element => {
     const { cx, cy, payload } = props
-    const region = payload?.region || 'Unknown'
     const size = payload?.size || 50
-    
+    // Use nullish coalescing to properly handle colorIndex of 0
+    const colorIndex = payload?.colorIndex ?? 0
+
+    // Get color based on index (cycles through colors array)
+    // Ensure we always have a valid color, defaulting to first color if something goes wrong
+    const bubbleColor = BUBBLE_COLORS[colorIndex % BUBBLE_COLORS.length] || BUBBLE_COLORS[0]
+
     // Ensure cx and cy are valid numbers, default to 0 if not
     const x = typeof cx === 'number' ? cx : 0
     const y = typeof cy === 'number' ? cy : 0
-    
-    // Create unique ID for each bubble to avoid gradient conflicts
-    const bubbleId = `bubble-${region.replace(/\s+/g, '-').toLowerCase()}`
-    
+
     return (
       <g>
         {/* Shadow for 3D effect */}
@@ -138,28 +141,14 @@ export function BubbleChart({
           fill="rgba(0, 0, 0, 0.2)"
           opacity={0.3}
         />
-        {/* Main bubble with gradient for 3D effect */}
-        <defs>
-          <radialGradient id={`gradient-${bubbleId}`}>
-            <stop offset="0%" stopColor={BUBBLE_COLOR} stopOpacity={1} />
-            <stop offset="50%" stopColor={BUBBLE_COLOR} stopOpacity={0.9} />
-            <stop offset="100%" stopColor={BUBBLE_COLOR} stopOpacity={0.7} />
-          </radialGradient>
-          <filter id={`glow-${bubbleId}`}>
-            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
+        {/* Main bubble - using direct fill color for reliability */}
         <circle
           cx={x}
           cy={y}
           r={size / 2}
-          fill={`url(#gradient-${bubbleId})`}
-          filter={`url(#glow-${bubbleId})`}
-          stroke={BUBBLE_COLOR}
+          fill={bubbleColor}
+          fillOpacity={0.85}
+          stroke={bubbleColor}
           strokeWidth={2}
           style={{
             transition: 'all 0.3s ease',
@@ -244,14 +233,14 @@ export function BubbleChart({
             }}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-          <Scatter 
-            name="Regions" 
-            data={transformedData} 
-            fill={BUBBLE_COLOR}
+          <Scatter
+            name="Regions"
+            data={transformedData}
+            fill={BUBBLE_COLORS[0]}
             shape={CustomShape}
           >
             {transformedData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={BUBBLE_COLOR} />
+              <Cell key={`cell-${index}`} fill={BUBBLE_COLORS[index % BUBBLE_COLORS.length]} />
             ))}
           </Scatter>
         </RechartsScatterChart>
